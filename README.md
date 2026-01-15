@@ -1,421 +1,217 @@
-# CMake+VCPKG integration
+# Xbox Game Demo - 2D Coin Collection Game
 
-This project is a demonstration of a fully standalone method for making use of the *Microsoft GDK* without having to install anything. It makes use of the [vc Package Manager](https://aka.ms/vcpkg) to add the packaged versions of *Microsoft GDK*, the *DirectX 12 Agility SDK*, etc. This can be used as a baseline to ship in the Microsoft Store and the Xbox PC App.
+一个基于 DirectX 12 和 Microsoft GDK 的 2D 游戏演示项目，展示了使用 CMake 和 vcpkg 构建 Xbox/Windows 游戏的完整工作流程。
 
-# Newly created project
+## 🎮 游戏特性
 
-* Precompiled header files
-  * pch.cpp
-  * pch.h
+- **2D 精灵渲染**：使用 DirectXTK12 的 SpriteBatch 进行高效 2D 渲染
+- **Coin 收集系统**：10 个随机分布的 coin，带有上下浮动动画
+- **碰撞检测**：使用平方距离优化，无需 sqrt 计算
+- **游戏状态管理**：Title、Playing、Paused、Win 四种状态
+- **输入支持**：支持手柄（GameInput）和键盘（WASD/方向键）
+- **实时日志显示**：屏幕下半部分显示调试日志
+- **HUD 信息**：显示 FPS、玩家位置、分数和剩余 coin 数
 
-* Main application entry-point and classic Windows procedure function
-  * Main.cpp
+## 🎯 游戏玩法
 
-* Timer helper class
-  * StepTimer.h
+1. **开始游戏**：按 `Space`/`Enter` 或手柄 `A` 键开始
+2. **移动玩家**：使用 `WASD`/方向键或手柄左摇杆移动青色方块
+3. **收集 Coins**：接近金色 coin（距离 < 30 像素）时自动收集
+4. **完成目标**：收集所有 10 个 coin 即可获胜
+5. **重新开始**：获胜后按 `A` 键或 `Space`/`Enter` 重新开始
 
-* The Game class
-  * Game.cpp
-  * Game.h
+## 🚀 快速开始
 
-* The Direct3D 12 device and swapchain class
-  * DeviceResources.cpp
-  * DeviceResources.h
+### 前置要求
 
-* The Microsoft Game configuration file
-  * MicrosoftGameConfig.mgc
+- Windows 10/11 或 Xbox 开发环境
+- Visual Studio 2022 (v17.6 或更高版本)
+- CMake 3.21 或更高版本
+- [Microsoft Game Runtime](https://aka.ms/GamingRepairTool)（如果未安装，运行修复工具）
 
-* Resources
-  * xbox.ico
-  * resource.rc
-  * settings.manifest
-  * MGC image assets
+### 构建项目
 
-* vcpkg 'manifest-mode' integration
-  * vcpkg.json
-  * vcpkg-configuration.json
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/dongjingyang/xboxgamedemo.git
+   cd xboxgamedemo
+   ```
 
-For a detailed description of the C++ source in the template, see [GitHub](https://github.com/microsoft/DirectXTK12/wiki/Using-DeviceResources#tour-of-the-code).
+2. **使用 Visual Studio**
+   - 打开 Visual Studio 2022
+   - 选择 "Open a local folder"
+   - 选择项目根目录
+   - Visual Studio 会自动检测 CMake 并配置项目
 
-# Microsoft GDK
+3. **使用命令行**
+   ```bash
+   cmake --preset x64-Debug
+   cmake --build --preset x64-Debug
+   ```
 
-To add PlayFab libraries to the project, enable the *playfab* feature in the **ms-gdk** port in ``vcpkg.json`` by replacing the `"ms-gdk",` entry with the following:
+### 运行游戏
+
+构建完成后，可执行文件位于：
+- Debug: `out/build/x64-Debug/testfirst/testfirst.exe`
+- Release: `out/build/x64-Release/testfirst/testfirst.exe`
+
+## 📁 项目结构
 
 ```
+testfirst/
+├── Assets/              # 游戏资源
+│   ├── arial.spritefont # 字体文件
+│   └── *.png            # 图标资源
+├── Game.cpp/h           # 游戏主逻辑（状态管理、coin 系统、渲染）
+├── DeviceResources.cpp/h # Direct3D 12 设备资源管理
+├── Main.cpp              # 程序入口和窗口消息处理
+├── pch.cpp/h            # 预编译头文件
+└── StepTimer.h           # 游戏计时器
+
+External/
+└── DirectXTK12/          # DirectX Tool Kit for DirectX 12（子模块）
+
+CMakeLists.txt            # CMake 主配置文件
+vcpkg.json                # vcpkg 依赖清单
+vcpkg-configuration.json  # vcpkg 配置
+```
+
+## 🛠️ 技术栈
+
+- **图形 API**: DirectX 12
+- **游戏框架**: Microsoft GDK
+- **渲染库**: DirectXTK12 (SpriteBatch, SpriteFont)
+- **输入系统**: GameInput API
+- **构建系统**: CMake + vcpkg
+- **编程语言**: C++17
+
+## 📦 依赖项
+
+项目使用 vcpkg 管理依赖，主要包含：
+
+- `ms-gdk` - Microsoft Game Development Kit
+- `directxtk12` - DirectX Tool Kit for DirectX 12
+- `directxmath` - DirectX Math 库
+- `gameinput` - GameInput API
+- `directx-dxc` - DirectX Shader Compiler
+- `winpixevent` - PIX 事件支持
+
+所有依赖在首次构建时由 vcpkg 自动下载和编译。
+
+## 🎨 游戏实现细节
+
+### Coin 系统
+
+- **数据结构**：`vector<Coin>`，每个 coin 包含位置和存活状态
+- **初始化**：进入 Playing 状态时随机生成 10 个 coin，避开屏幕边缘 50 像素
+- **动画**：使用 `sin(time * 2.0) * 10.0` 实现上下浮动效果
+- **碰撞检测**：使用平方距离比较（`dx² + dy² < 30²`），避免 sqrt 计算
+
+### 游戏状态
+
+- **Title**: 标题屏幕，显示 "Press A to Start"
+- **Playing**: 游戏进行中，玩家可以移动和收集 coin
+- **Paused**: 暂停状态，按 ESC 或 Menu 键暂停/继续
+- **Win**: 胜利状态，收集完所有 coin 后显示 "You Win - Press A to Restart"
+
+### 日志系统
+
+- 所有 `OutputDebugStringA` 输出都会显示在屏幕下半部分
+- 最多显示 20 行日志
+- 线程安全的日志缓冲区
+- 自动滚动显示最新日志
+
+## 🔧 CMake + vcpkg 集成
+
+本项目演示了完全独立的方法来使用 Microsoft GDK，无需安装任何额外工具。所有依赖通过 [vcpkg](https://aka.ms/vcpkg) 包管理器自动管理。
+
+### vcpkg 配置
+
+项目使用 vcpkg 的 "manifest mode"，依赖项在 `vcpkg.json` 中声明：
+
+```json
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "dependencies": [
-...
-    {
-      "name": "ms-gdk",
-      "features": [
-        "playfab"
-      ]
-    },
-    "winpixevent"
-  ]
-}
-```
-
-Then uncomment in the **pch.h** the include headers:
-
-```cpp
-#include <playfab/core/PFErrors.h>
-#include <playfab/services/PFServices.h>
-```
-
-# VCPKG integration
-
-The project makes use of Visual Studio **Microsoft.VisualStudio.Component.vcpkg**. This requires Visual Studio 2022 v17.6 or later.
-
-When the project is created, the 'head commit id' is taken from the vcpkg GitHub project making it use the 'latest' available at that time. To move to newer versions of the ports, update the baseline hash in ``vcpkg-configuration.json``. For example, the following sets the baseline to match the June 2025 release of the registry on [GitHub](https://github.com/microsoft/vcpkg/releases):
-
-```
-{
-    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg-configuration.schema.json",
-    "default-registry": {
-      "kind": "builtin",
-      "baseline": "ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0"
-    }
-}
-```
-
-If you want to use static libraries where possible rather than DLLs, update **CMakePresets.json** and change the **VCPKG_TARGET_TRIPLET** variable from ``x64-windows`` to ``x64-windows-static-md``. In addition, you need to add the **ms-gdk** entry a second time as 'host: true' to the `vcpkg.json` since makepkg is needed at build time:
-
-```
-{
-  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "dependencies": [
-...
-    "gameinput",
-    {
-      "name": "ms-gdk",
-      "host": true
-    },
     "ms-gdk",
+    "directxtk12",
+    "directxmath",
+    "gameinput",
+    "directx-dxc",
     "winpixevent"
   ]
 }
 ```
 
-To use a specific version of a port, update ``vcpkg.json`` with an *overrides* section:
+### 更新依赖版本
 
-```
+要更新到新版本的依赖，修改 `vcpkg-configuration.json` 中的 baseline：
+
+```json
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "dependencies": [
-...
-  ],
-  "overrides": [
-    {
-      "name": "ms-gdk",
-      "version": "2410.2.1916"
-    }
-  ]
+  "default-registry": {
+    "kind": "builtin",
+    "baseline": "最新提交哈希"
+  }
 }
 ```
 
-> The **directx-dxc** port is listed twice by design. The 'host: true' case is for build-time usage. The second entry makes the DXC API available at runtime.
+### 使用静态库
 
-# Rendering a simple triangle
+要使用静态库而非 DLL，在 `CMakePresets.json` 中将 `VCPKG_TARGET_TRIPLET` 从 `x64-windows` 改为 `x64-windows-static-md`。
 
-We can quickly add a simple triangle render to the project using the [DirectX Tool Kit](https://github.com/microsoft/DirectXTK12/wiki).
+## 📝 字体文件生成
 
-1. Edit the ``vcpkg.json`` and add a entry for the **directxtk12** port:
+项目使用 `.spritefont` 格式的字体文件。如果字体文件缺失，可以使用提供的脚本生成：
 
-```
-{
-...
-    "directxmath",
-    {
-      "name": "directxtk12",
-      "default-features": false,
-      "features": [
-        "gameinput"
-      ]
-    },
-    "dstorage",
-...
-}
+```powershell
+.\download_makespritefont.ps1
 ```
 
-> Note that this specifically opts in to using [GameInput](http://aka.ms/gameinput) for the GamePad, Keyboard, and Mouse implementation.
+然后使用生成的 MakeSpriteFont 工具：
 
-Then edit ``CMakeLists.txt`` to uncomment the required package usage:
-
-```
-find_package(directxtk12 CONFIG REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Microsoft::DirectXTK12)
+```bash
+MakeSpriteFont.exe "Arial" testfirst\Assets\arial.spritefont /FontSize:32
 ```
 
-2. In the **pch.h** header uncomment the include header and then add a few more required headers:
+详细说明请参考 `testfirst/Assets/README_FONT.md`。
 
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-#include <directxtk12/CommonStates.h>
-#include <directxtk12/Effects.h>
-#include <directxtk12/GraphicsMemory.h>
-#include <directxtk12/PrimitiveBatch.h>
-#include <directxtk12/SimpleMath.h>
-#include <directxtk12/VertexTypes.h>
-```
+## 📦 打包
 
-3. In the **Game.h** header, uncomment the variable near the bottom of the class declaration and then add a few more required variables:
+使用 PowerShell 脚本创建打包布局：
 
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-std::unique_ptr<DirectX::GraphicsMemory>    m_graphicsMemory;
-
-using VertexType = DirectX::VertexPositionColor;
-
-std::unique_ptr<DirectX::BasicEffect>       m_effect;
-std::unique_ptr<DirectX::PrimitiveBatch<VertexType>> m_batch;
-```
-
-4. In the **Game.cpp** source file, near the top of the file, add another using statement for the *SimpleMath* namespace:
-
-```cpp
-using namespace DirectX;
-using namespace DirectX::SimpleMath;
-
-using Microsoft::WRL::ComPtr;
-```
-
-5. Modify the **Render** method in **Game.cpp** by replacing the TODO comment with the following:
-
-```cpp
-// Add your rendering code here.
-m_effect->Apply(commandList);
-
-m_batch->Begin(commandList);
-
-VertexPositionColor v1(Vector3(0.f, 0.5f, 0.5f), Colors::Red);
-VertexPositionColor v2(Vector3(0.5f, -0.5f, 0.5f), Colors::Green);
-VertexPositionColor v3(Vector3(-0.5f, -0.5f, 0.5f), Colors::Blue);
-
-m_batch->DrawTriangle(v1, v2, v3);
-
-m_batch->End();
-```
-
-Be sure to also uncomment the line after the call to `Present`:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory->Commit(m_deviceResources->GetCommandQueue());
-```
-
-6. Modify the **CreateDeviceDependentResources** method in **Game.cpp** by uncommmenting the line and replacing the TODO comment with the following:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory = std::make_unique<GraphicsMemory>(device);
-
-// Initialize device dependent objects here (independent of window size).
-const RenderTargetState rtState(m_deviceResources->GetBackBufferFormat(),
-    m_deviceResources->GetDepthBufferFormat());
-
-m_batch = std::make_unique<PrimitiveBatch<VertexType>>(device);
-
-EffectPipelineStateDescription pd(
-    &VertexType::InputLayout,
-    CommonStates::Opaque,
-    CommonStates::DepthDefault,
-    CommonStates::CullNone,
-    rtState);
-
-m_effect = std::make_unique<BasicEffect>(device, EffectFlags::VertexColor, pd);
-```
-
-7. Modify the **OnDeviceLost** method in **Game.cpp** by uncommmenting the line and replacing the TODO comment with the following:
-
-```cpp
-// Add Direct3D resource cleanup here.
-m_effect.reset();
-m_batch.reset();
-
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory.reset();
-```
-
-8. Then build & run the project.
-
-> For more things you can try out with *DirectX Tool Kit*, see the [GitHub wiki](https://github.com/microsoft/DirectXTK12/wiki/Simple-rendering). You may need to add more include *directxtk12* headers to the **pch.h**. For *DirectX Tool Kit for Audio*, you also need to add "xaudio2-9" or "xaudio2redist" to the list of features for the *directxtk12* port in `vcpkg.json`.
-
-# Rendering a teapot
-
-Instead of a triangle, we can render a Utah teapot (i.e. the "Hello, World" of graphics demos) to the project using the [DirectX Tool Kit](https://github.com/microsoft/DirectXTK12/wiki).
-
-1. Set up ``.vcpkg.json`` and ``CMakeLists.txt`` as shown in step #1 above under *Rendering a simple triangle*.
-
-2. In the **pch.h** header uncomment the include header and then add a few more required headers:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-#include <directxtk12/CommonStates.h>
-#include <directxtk12/Effects.h>
-#include <directxtk12/GeometricPrimitive.h>
-#include <directxtk12/GraphicsMemory.h>
-#include <directxtk12/SimpleMath.h>
-```
-
-3. In the **Game.h** header, uncomment the variable near the bottom of the class declaration and then add a few more required variables:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
-
-DirectX::SimpleMath::Matrix m_world;
-DirectX::SimpleMath::Matrix m_view;
-DirectX::SimpleMath::Matrix m_proj;
-
-std::unique_ptr<DirectX::BasicEffect> m_shapeEffect;
-std::unique_ptr<DirectX::GeometricPrimitive> m_shape;
-```
-
-4. In the **Game.cpp** source file, near the top of the file, add another using statement for the *SimpleMath* namespace:
-
-```cpp
-using namespace DirectX;
-using namespace DirectX::SimpleMath;
-
-using Microsoft::WRL::ComPtr;
-```
-
-5. Modify the **Update** method in **Game.cpp** replacing the TODO comment with the following:
-
-```cpp
-// Add your game logic here.
-auto time = static_cast<float>(timer.GetTotalSeconds());
-
-m_world = Matrix::CreateRotationY(cosf(time) * 2.f);
-```
-
-6. Modify the **Render** method in **Game.cpp** by replacing the TODO comment with the following:
-
-```cpp
-// Add your rendering code here.
-m_shapeEffect->SetWorld(m_world);
-
-m_shapeEffect->Apply(commandList);
-
-m_shape->Draw(commandList);
-```
-
-Be sure to also uncomment the line after the call to `Present`:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory->Commit(m_deviceResources->GetCommandQueue());
-```
-
-7. Modify the **CreateDeviceDependentResources** method in **Game.cpp** by uncommmenting the line and replacing the TODO comment with the following:
-
-```cpp
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory = std::make_unique<GraphicsMemory>(device);
-
-// Initialize device dependent objects here (independent of window size).
-const RenderTargetState rtState(m_deviceResources->GetBackBufferFormat(),
-    m_deviceResources->GetDepthBufferFormat());
-
-EffectPipelineStateDescription pd(
-    &GeometricPrimitive::VertexType::InputLayout,
-    CommonStates::Opaque,
-    CommonStates::DepthDefault,
-    CommonStates::CullNone,
-    rtState);
-
-m_shapeEffect = std::make_unique<BasicEffect>(device, EffectFlags::Lighting, pd);
-m_shapeEffect->EnableDefaultLighting();
-m_shapeEffect->SetDiffuseColor(Colors::Green);
-
-m_shape = GeometricPrimitive::CreateTeapot();
-
-m_world = Matrix::Identity;
-```
-
-8. Modify the **CreateWindowSizeDependentResources** method in **Game.cpp** by uncommmenting the line and replacing the TODO comment with the following:
-
-```cpp
-// Initialize windows-size dependent objects here.
-auto size = m_deviceResources->GetOutputSize();
-
-m_view = Matrix::CreateLookAt(Vector3(2.f, 2.f, 2.f),
-    Vector3::Zero, Vector3::UnitY);
-m_proj = Matrix::CreatePerspectiveFieldOfView(XM_PI / 4.f,
-    float(size.right) / float(size.bottom), 0.1f, 10.f);
-
-m_shapeEffect->SetView(m_view);
-m_shapeEffect->SetProjection(m_proj);
-```
-
-9. Modify the **OnDeviceLost** method in **Game.cpp** by uncommmenting the line and replacing the TODO comment with the following:
-
-```cpp
-// Add Direct3D resource cleanup here.
-m_shapeEffect.reset();
-m_shape.reset();
-
-// If using the DirectX Tool Kit for DX12, uncomment this line:
-m_graphicsMemory.reset();
-```
-
-10. Then build & run the project.
-
-> For more things you can try out with *DirectX Tool Kit*, see the [GitHub wiki](https://github.com/microsoft/DirectXTK12/wiki/3D-shapes).
-
-# Packaging
-
-A PowerShell script provides a simple method for creating a loose layout and packaging after making the build.
-
-```
+```powershell
 powershell -File PackageLayout.ps1 -Destination layout -Configuration Release
 ```
 
-> The file ``PackageLayout.flt`` lists string patterns of filenames to exclude such as ".exp" and ".pdb"
+`PackageLayout.flt` 文件列出了要排除的文件模式（如 `.exp`、`.pdb`）。
 
-> To create packages with ARM64 native support, your package requires both an x64 and ARM64 executable in the `ExecutableList`. This requires some additional configuration in the project, MicrosoftGameConfig.mgc, and packaging steps.
+## ⚠️ 已知问题
 
-# Known Issues
+1. **路径长度限制**：如果项目路径过长（包含 vcpkg_installed 和 triplet 文件夹），可能超过 `_MAX_PATH`。建议将项目放在较浅的目录中。
 
-* Depending on where the project is created, the overall path-length with the vcpkg_installed and triplet folders can exceed ``_MAX_PATH``. If this happens, move the project to a more 'shallow' parent directory location.
+2. **Game Runtime 未安装**：如果看到 "Game Runtime is not installed" 错误，运行 [Gaming Services Repair Tool](https://aka.ms/GamingRepairTool) 或使用 winget：
+   ```bash
+   winget install 9MWPM2CQNLHN -s msstore
+   ```
 
-* The project initializes the GameRuntime as part of startup. If it is not present, you will see an error that reads "Game Runtime is not installed on this sytem or needs updating". To fix this, run the [Gaming Services Repair Tool for PC](https://aka.ms/GamingRepairTool) or use *winget*:
+3. **ms-gdk 包名变更**：从 2025 年 10 月起，ms-gdk 包名已更改。如果使用旧版本 GDK，需要更新 CMakeLists.txt 中的包名。
 
-```
-winget install 9MWPM2CQNLHN -s msstore
-```
+## 📚 进一步阅读
 
-* The name of the *package* for the **ms-gdk** port changed in October 2025.
+- [Microsoft GDK 文档](http://aka.ms/gdkdocs)
+- [DirectX 12 Agility SDK](https://aka.ms/directx12agility)
+- [DirectXTK12 Wiki](https://github.com/microsoft/DirectXTK12/wiki)
+- [vcpkg for Xbox](https://learn.microsoft.com/vcpkg/users/platforms/xbox/)
+- [GameInput API](http://aka.ms/gameinput)
 
-If using older versions of the GDK, then change:
+## 📄 许可证
 
-```
-find_package(ms-gdk CONFIG REQUIRED)
-```
+本项目基于 Microsoft GDK 模板项目，遵循相应的许可证条款。
 
-to
+## 🤝 贡献
 
-```
-find_package(xbox.gameruntime CONFIG REQUIRED)
-find_package(xbox.libhttpclient CONFIG REQUIRED)
-find_package(xbox.xcurl.api CONFIG REQUIRED)
-find_package(xbox.services.api.c CONFIG REQUIRED)
+欢迎提交 Issue 和 Pull Request！
 
-# If using PlayFab
-find_package(playfab.services.c CONFIG REQUIRED)
-```
+---
 
-# Further reading
-
-[Game Development Kit (GDK) documentation](http://aka.ms/gdkdocs)
-
-[DirectX 12 Agility SDK](https://aka.ms/directx12agility)
-
-[StepTimer](https://walbourn.github.io/understanding-game-time-revisited/)
-
-[Vcpkg for Xbox](https://learn.microsoft.com/vcpkg/users/platforms/xbox/)
-#   x b o x g a m e d e m o  
- #   x b o x g a m e d e m o  
- 
+**注意**：这是一个演示项目，展示了使用现代 C++ 和 DirectX 12 开发 Xbox/Windows 游戏的基础架构。可以作为学习 DirectX 12 和 Microsoft GDK 的起点。
