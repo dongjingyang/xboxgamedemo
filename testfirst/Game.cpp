@@ -29,14 +29,8 @@ using Microsoft::WRL::ComPtr;
 
 Game::Game() noexcept(false)
     : m_state(GameState::Title)
-    , m_playerPos(400.0f, 300.0f)  // Center of default 800x600 window (kept for compatibility)
-    , m_score(0)
     , m_time(0.0f)
     , m_gameInput(nullptr)
-    , m_lastButtonState(0)
-    , m_direction(Direction::Right)
-    , m_nextDirection(Direction::Right)
-    , m_moveAccumulator(0.0f)
     , m_rumbleTimeLeft(0.0f)
 {
     m_deviceResources = std::make_unique<DX::DeviceResources>();
@@ -127,263 +121,117 @@ void Game::Update(DX::StepTimer const& timer)
     // Update rumble timer
     UpdateRumble(elapsedTime);
 
-    // Process GameInput (Gamepad and Keyboard)
+    // Update effects
+    m_effects.Update(elapsedTime);
+
+    // Poll input using InputRouter
 #if defined(USING_GAMEINPUT) || defined(_GAMING_DESKTOP) || defined(_GAMING_XBOX)
-    if (m_gameInput)
+    GameInput::v3::IGameInputDevice* activeDevice = nullptr;
+    InputState inputState = m_inputRouter.Poll(m_gameInput, &activeDevice);
+    
+    // Update active gamepad device for rumble
+    if (activeDevice)
     {
-        GameInput::v3::IGameInput* gameInput = static_cast<GameInput::v3::IGameInput*>(m_gameInput);
+        m_activeGamepadDevice = activeDevice;
+        activeDevice->Release(); // Release extra reference from Poll
         
-        // Try gamepad first
-        GameInput::v3::IGameInputReading* reading = nullptr;
-        if (SUCCEEDED(gameInput->GetCurrentReading(GameInput::v3::GameInputKindGamepad, nullptr, &reading)) && reading)
-        {
-            // Get and cache the gamepad device for rumble (update every frame to ensure we have the latest device)
-            GameInput::v3::IGameInputDevice* device = nullptr;
-            reading->GetDevice(&device);
-            if (device)
-            {
-                // ComPtr assignment will automatically AddRef
-                m_activeGamepadDevice = device;
-                device->Release(); // Release the extra reference from GetDevice
-                
 #ifdef _DEBUG
-                // Log device acquisition and rumble support (only once to avoid spam)
-                static bool loggedDevice = false;
-                if (!loggedDevice && m_activeGamepadDevice)
-                {
-                    const GameInput::v3::GameInputDeviceInfo* info = nullptr;
-                    m_activeGamepadDevice->GetDeviceInfo(&info);
-                    if (info)
-                    {
-                        char debugMsg[256];
-                        sprintf_s(debugMsg, "Gamepad device acquired: %p, Rumble motors: 0x%X\n", 
-                            m_activeGamepadDevice.Get(), info->supportedRumbleMotors);
-                        AddLog(debugMsg);
-                        
-                        // Check if rumble is supported
-                        if (info->supportedRumbleMotors & (GameInput::v3::GameInputRumbleLowFrequency | GameInput::v3::GameInputRumbleHighFrequency))
-                        {
-                            AddLog("Device supports rumble motors\n");
-                        }
-                        else
-                        {
-                            AddLog("WARNING: Device does not support rumble motors!\n");
-                        }
-                    }
-                    loggedDevice = true;
-                }
-#endif
-            }
-            
-            GameInput::v3::GameInputGamepadState gamepadState = {};
-            if (SUCCEEDED(reading->GetGamepadState(&gamepadState)))
-            {
-                // Detect button presses (buttons that are pressed now but weren't before)
-                uint64_t buttonChanges = gamepadState.buttons & ~m_lastButtonState;
-                
-                // Handle A button press (start game from title, resume from paused, or restart from win/gameover)
-                if (buttonChanges & GameInput::v3::GameInputGamepadA)
-                {
-                    if (m_state == GameState::Title)
-                    {
-                        m_state = GameState::Playing;
-                        ResetGame();
-                    }
-                    else if (m_state == GameState::Paused)
-                    {
-                        m_state = GameState::Playing;
-                    }
-                    else if (m_state == GameState::Win || m_state == GameState::GameOver)
-                    {
-                        // Restart game
-                        m_state = GameState::Playing;
-                        ResetGame();
-                    }
-                }
-                
-                // Handle Menu button (Start button) press - pause/unpause
-                if (buttonChanges & GameInput::v3::GameInputGamepadMenu)
-                {
-                    if (m_state == GameState::Playing)
-                    {
-                        m_state = GameState::Paused;
-                        StopRumble(); // Stop rumble when pausing
-                    }
-                    else if (m_state == GameState::Paused)
-                    {
-                        m_state = GameState::Playing;
-                    }
-                }
-                
-                // Update last button state
-                m_lastButtonState = gamepadState.buttons;
-                
-                // Handle left thumbstick for direction input (only in Playing state)
-                if (m_state == GameState::Playing)
-                {
-                    const float threshold = 0.5f; // Threshold for direction detection
-                    
-                    float leftX = gamepadState.leftThumbstickX;
-                    float leftY = -gamepadState.leftThumbstickY; // Invert Y for screen coordinates
-                    
-                    // Determine primary direction (horizontal takes priority if |x| > |y|)
-                    Direction newDir = m_nextDirection; // Keep current if no input
-                    
-                    if (fabsf(leftX) > threshold || fabsf(leftY) > threshold)
-                    {
-                        if (fabsf(leftX) > fabsf(leftY))
-                        {
-                            // Horizontal movement
-                            if (leftX > threshold)
-                                newDir = Direction::Right;
-                            else if (leftX < -threshold)
-                                newDir = Direction::Left;
-                        }
-                        else
-                        {
-                            // Vertical movement
-                            if (leftY > threshold)
-                                newDir = Direction::Down;
-                            else if (leftY < -threshold)
-                                newDir = Direction::Up;
-                        }
-                        
-                        // Prevent 180-degree turn
-                        if ((m_direction == Direction::Up && newDir != Direction::Down) ||
-                            (m_direction == Direction::Down && newDir != Direction::Up) ||
-                            (m_direction == Direction::Left && newDir != Direction::Right) ||
-                            (m_direction == Direction::Right && newDir != Direction::Left))
-                        {
-                            m_nextDirection = newDir;
-                        }
-                    }
-                }
-            }
-            
-            reading->Release();
-        }
-        
-        // Also check keyboard input as fallback
-        reading = nullptr;
-        if (SUCCEEDED(gameInput->GetCurrentReading(GameInput::v3::GameInputKindKeyboard, nullptr, &reading)) && reading)
+        // Log device acquisition (only once)
+        static bool loggedDevice = false;
+        if (!loggedDevice && m_activeGamepadDevice)
         {
-            static uint64_t lastKeyState = 0;
-            uint32_t keyCount = reading->GetKeyCount();
-            if (keyCount > 0)
+            const GameInput::v3::GameInputDeviceInfo* info = nullptr;
+            m_activeGamepadDevice->GetDeviceInfo(&info);
+            if (info)
             {
-                constexpr uint32_t maxKeys = 16;
-                GameInput::v3::GameInputKeyState keyState[maxKeys];
-                uint32_t actualCount = reading->GetKeyState(maxKeys, keyState);
+                char debugMsg[256];
+                sprintf_s(debugMsg, "Gamepad device acquired: %p, Rumble motors: 0x%X\n", 
+                    m_activeGamepadDevice.Get(), info->supportedRumbleMotors);
+                AddLog(debugMsg);
                 
-                // GetKeyState returns currently pressed keys - if a key is in the array, it's pressed
-                uint64_t currentKeyState = 0;
-                for (uint32_t i = 0; i < actualCount; ++i)
+                if (info->supportedRumbleMotors & (GameInput::v3::GameInputRumbleLowFrequency | GameInput::v3::GameInputRumbleHighFrequency))
                 {
-                    // Key is in the array, so it's pressed (no need to check isActive - it doesn't exist)
-                    currentKeyState |= (1ULL << (keyState[i].virtualKey % 64));
+                    AddLog("Device supports rumble motors\n");
                 }
-                
-                uint64_t keyChanges = currentKeyState & ~lastKeyState;
-                
-                // Space or Enter = A button (start/resume/restart)
-                if (keyChanges & ((1ULL << (VK_SPACE % 64)) | (1ULL << (VK_RETURN % 64))))
+                else
                 {
-                    if (m_state == GameState::Title)
-                    {
-                        m_state = GameState::Playing;
-                        ResetGame();
-                    }
-                    else if (m_state == GameState::Paused)
-                    {
-                        m_state = GameState::Playing;
-                    }
-                    else if (m_state == GameState::Win || m_state == GameState::GameOver)
-                    {
-                        // Restart game
-                        m_state = GameState::Playing;
-                        ResetGame();
-                    }
+                    AddLog("WARNING: Device does not support rumble motors!\n");
                 }
-                
-                // Escape = Menu button (pause)
-                if (keyChanges & (1ULL << (VK_ESCAPE % 64)))
-                {
-                    if (m_state == GameState::Playing)
-                    {
-                        m_state = GameState::Paused;
-                    }
-                    else if (m_state == GameState::Paused)
-                    {
-                        m_state = GameState::Playing;
-                    }
-                }
-                
-                // Arrow keys or WASD for direction input (only in Playing state)
-                if (m_state == GameState::Playing)
-                {
-                    Direction newDir = m_nextDirection; // Keep current if no input
-                    
-                    // Check arrow keys and WASD for direction
-                    if (keyChanges & (1ULL << (VK_UP % 64)) || keyChanges & (1ULL << ('W' % 64)))
-                    {
-                        newDir = Direction::Up;
-                    }
-                    else if (keyChanges & (1ULL << (VK_DOWN % 64)) || keyChanges & (1ULL << ('S' % 64)))
-                    {
-                        newDir = Direction::Down;
-                    }
-                    else if (keyChanges & (1ULL << (VK_LEFT % 64)) || keyChanges & (1ULL << ('A' % 64)))
-                    {
-                        newDir = Direction::Left;
-                    }
-                    else if (keyChanges & (1ULL << (VK_RIGHT % 64)) || keyChanges & (1ULL << ('D' % 64)))
-                    {
-                        newDir = Direction::Right;
-                    }
-                    
-                    // Prevent 180-degree turn
-                    if ((m_direction == Direction::Up && newDir != Direction::Down) ||
-                        (m_direction == Direction::Down && newDir != Direction::Up) ||
-                        (m_direction == Direction::Left && newDir != Direction::Right) ||
-                        (m_direction == Direction::Right && newDir != Direction::Left))
-                    {
-                        m_nextDirection = newDir;
-                    }
-                }
-                
-                // Handle Space/Enter for restart from Win/GameOver state
-                if (keyChanges & ((1ULL << (VK_SPACE % 64)) | (1ULL << (VK_RETURN % 64))))
-                {
-                    if (m_state == GameState::Win || m_state == GameState::GameOver)
-                    {
-                        // Restart game
-                        m_state = GameState::Playing;
-                        ResetGame();
-                    }
-                }
-                
-                lastKeyState = currentKeyState;
             }
-            
-            reading->Release();
+            loggedDevice = true;
         }
+#endif
     }
+#else
+    InputState inputState = m_inputRouter.Poll(m_gameInput, nullptr);
 #endif
 
-    // Snake movement (only in Playing state, not paused)
+    // Handle state transitions based on input
+    if (inputState.startPressed)
+    {
+        if (m_state == GameState::Title)
+        {
+            m_state = GameState::Playing;
+            int width, height;
+            GetDefaultSize(width, height);
+            m_snakeGame.Reset(width, height);
+        }
+        else if (m_state == GameState::Paused)
+        {
+            m_state = GameState::Playing;
+        }
+        else if (m_state == GameState::Win || m_state == GameState::GameOver)
+        {
+            m_state = GameState::Playing;
+            int width, height;
+            GetDefaultSize(width, height);
+            m_snakeGame.Reset(width, height);
+        }
+    }
+
+    if (inputState.pausePressed)
+    {
+        if (m_state == GameState::Playing)
+        {
+            m_state = GameState::Paused;
+            StopRumble();
+        }
+        else if (m_state == GameState::Paused)
+        {
+            m_state = GameState::Playing;
+        }
+    }
+
+    // Handle direction input and snake game update (only in Playing state)
     if (m_state == GameState::Playing)
     {
-        // Update direction from queued direction
-        m_direction = m_nextDirection;
-        
-        // Accumulate time for discrete movement
-        m_moveAccumulator += elapsedTime;
-        
-        // Move snake when accumulator reaches move interval
-        while (m_moveAccumulator >= c_moveInterval)
+        // Queue direction if input changed
+        if (inputState.dir.has_value())
         {
-            MoveSnakeOneStep();
-            m_moveAccumulator -= c_moveInterval;
+            m_snakeGame.QueueDirection(inputState.dir.value());
+        }
+
+        // Update snake game
+        SnakeGameEvents events = m_snakeGame.Update(elapsedTime);
+
+        // Handle events
+        if (events.ateFood)
+        {
+#ifdef _DEBUG
+            char debugMsg[256];
+            sprintf_s(debugMsg, "Food eaten at (%.1f, %.1f) - triggering effects\n", events.foodPos.x, events.foodPos.y);
+            AddLog(debugMsg);
+#endif
+            // Trigger effects
+            m_effects.OnEatFood(events.foodPos);
+            // Trigger rumble
+            StartRumble(0.6f, 0.7f, 0.0f, 0.0f, 0.08f);
+        }
+
+        if (events.gameOver)
+        {
+            m_state = GameState::GameOver;
+            StopRumble();
         }
     }
 
@@ -421,11 +269,14 @@ void Game::Render()
     if (m_spriteBatch)
     {
         m_spriteBatch->Begin(commandList);
-    
-    // Draw based on game state
-    switch (m_state)
-    {
-    case GameState::Title:
+
+        // Get camera offset from effects (screen shake)
+        DirectX::XMFLOAT2 cameraOffset = m_effects.GetCameraOffset();
+
+        // Draw based on game state
+        switch (m_state)
+        {
+        case GameState::Title:
         // Draw title screen text
         if (m_spriteFont)
         {
@@ -498,121 +349,54 @@ void Game::Render()
         }
         break;
         
-    case GameState::Playing:
-    case GameState::Paused:
-    case GameState::GameOver:
-    case GameState::Win:
-        // Draw snake (only if not empty)
-        if (m_placeholderTexture && m_placeholderTextureSRV.ptr != 0 && !m_snake.empty())
-        {
-            const float segmentSize = c_cellSize * 0.9f; // Slightly smaller than cell for visual gap
-            
-            // Draw snake body (all segments except head)
-            for (size_t i = 1; i < m_snake.size(); ++i)
+        case GameState::Playing:
+        case GameState::Paused:
+        case GameState::GameOver:
+        case GameState::Win:
+            // Draw scene (snake, food, particles) with camera offset
+            RenderScene(cameraOffset);
+
+            // Draw HUD (no camera offset)
+            RenderHUD();
+
+            // Draw state-specific text (no camera offset)
+            if (m_spriteFont)
             {
-                const DirectX::XMFLOAT2& segment = m_snake[i];
-                m_spriteBatch->Draw(
-                    m_placeholderTextureSRV,
-                    DirectX::XMUINT2(1, 1),
-                    DirectX::XMFLOAT2(segment.x - segmentSize * 0.5f, segment.y - segmentSize * 0.5f),
-                    nullptr,
-                    DirectX::Colors::LightGreen, // Body color
-                    0.0f,
-                    DirectX::XMFLOAT2(0.0f, 0.0f),
-                    segmentSize);
+                int width, height;
+                GetDefaultSize(width, height);
+
+                if (m_state == GameState::Paused)
+                {
+                    const wchar_t* pausedText = L"Paused - Press Start";
+                    DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(pausedText);
+                    float textWidth = DirectX::XMVectorGetX(textSize);
+                    float textHeight = DirectX::XMVectorGetY(textSize);
+                    float x = (static_cast<float>(width) - textWidth) * 0.5f;
+                    float y = (static_cast<float>(height) - textHeight) * 0.5f;
+                    m_spriteFont->DrawString(m_spriteBatch.get(), pausedText, DirectX::XMFLOAT2(x, y), DirectX::Colors::White);
+                }
+                else if (m_state == GameState::GameOver)
+                {
+                    const wchar_t* gameOverText = L"Game Over - Press A to Restart";
+                    DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(gameOverText);
+                    float textWidth = DirectX::XMVectorGetX(textSize);
+                    float textHeight = DirectX::XMVectorGetY(textSize);
+                    float x = (static_cast<float>(width) - textWidth) * 0.5f;
+                    float y = (static_cast<float>(height) - textHeight) * 0.5f;
+                    m_spriteFont->DrawString(m_spriteBatch.get(), gameOverText, DirectX::XMFLOAT2(x, y), DirectX::Colors::Red);
+                }
+                else if (m_state == GameState::Win)
+                {
+                    const wchar_t* winText = L"You Win - Press A to Restart";
+                    DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(winText);
+                    float textWidth = DirectX::XMVectorGetX(textSize);
+                    float textHeight = DirectX::XMVectorGetY(textSize);
+                    float x = (static_cast<float>(width) - textWidth) * 0.5f;
+                    float y = (static_cast<float>(height) - textHeight) * 0.5f;
+                    m_spriteFont->DrawString(m_spriteBatch.get(), winText, DirectX::XMFLOAT2(x, y), DirectX::Colors::Lime);
+                }
             }
-            
-            // Draw snake head (first segment)
-            const DirectX::XMFLOAT2& head = m_snake.front();
-            m_spriteBatch->Draw(
-                m_placeholderTextureSRV,
-                DirectX::XMUINT2(1, 1),
-                DirectX::XMFLOAT2(head.x - segmentSize * 0.5f, head.y - segmentSize * 0.5f),
-                nullptr,
-                DirectX::Colors::Cyan, // Head color
-                0.0f,
-                DirectX::XMFLOAT2(0.0f, 0.0f),
-                segmentSize);
-        }
-        
-        // Draw food
-        if (m_placeholderTexture && m_placeholderTextureSRV.ptr != 0 && m_food.alive)
-        {
-            const float foodSize = c_cellSize * 0.8f;
-            m_spriteBatch->Draw(
-                m_placeholderTextureSRV,
-                DirectX::XMUINT2(1, 1),
-                DirectX::XMFLOAT2(m_food.pos.x - foodSize * 0.5f, m_food.pos.y - foodSize * 0.5f),
-                nullptr,
-                DirectX::Colors::Gold, // Food color
-                0.0f,
-                DirectX::XMFLOAT2(0.0f, 0.0f),
-                foodSize);
-        }
-        
-        // Draw HUD (FPS, Score, Length)
-        if (m_spriteFont)
-        {
-            float yPos = 10.0f;
-            const float lineHeight = 30.0f; // Approximate line height
-            
-            // FPS
-            wchar_t fpsText[64];
-            float fps = static_cast<float>(m_timer.GetFramesPerSecond());
-            swprintf_s(fpsText, L"FPS: %.1f", fps);
-            m_spriteFont->DrawString(m_spriteBatch.get(), fpsText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
-            yPos += lineHeight;
-            
-            // Score
-            wchar_t scoreText[64];
-            swprintf_s(scoreText, L"Score: %d", m_score);
-            m_spriteFont->DrawString(m_spriteBatch.get(), scoreText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
-            yPos += lineHeight;
-            
-            // Length
-            wchar_t lengthText[64];
-            swprintf_s(lengthText, L"Length: %zu", m_snake.size());
-            m_spriteFont->DrawString(m_spriteBatch.get(), lengthText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
-        }
-        
-        // Draw state-specific text
-        if (m_spriteFont)
-        {
-            int width, height;
-            GetDefaultSize(width, height);
-            
-            if (m_state == GameState::Paused)
-            {
-                const wchar_t* pausedText = L"Paused - Press Start";
-                DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(pausedText);
-                float textWidth = DirectX::XMVectorGetX(textSize);
-                float textHeight = DirectX::XMVectorGetY(textSize);
-                float x = (static_cast<float>(width) - textWidth) * 0.5f;
-                float y = (static_cast<float>(height) - textHeight) * 0.5f;
-                m_spriteFont->DrawString(m_spriteBatch.get(), pausedText, DirectX::XMFLOAT2(x, y), DirectX::Colors::White);
-            }
-            else if (m_state == GameState::GameOver)
-            {
-                const wchar_t* gameOverText = L"Game Over - Press A to Restart";
-                DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(gameOverText);
-                float textWidth = DirectX::XMVectorGetX(textSize);
-                float textHeight = DirectX::XMVectorGetY(textSize);
-                float x = (static_cast<float>(width) - textWidth) * 0.5f;
-                float y = (static_cast<float>(height) - textHeight) * 0.5f;
-                m_spriteFont->DrawString(m_spriteBatch.get(), gameOverText, DirectX::XMFLOAT2(x, y), DirectX::Colors::Red);
-            }
-            else if (m_state == GameState::Win)
-            {
-                const wchar_t* winText = L"You Win - Press A to Restart";
-                DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(winText);
-                float textWidth = DirectX::XMVectorGetX(textSize);
-                float textHeight = DirectX::XMVectorGetY(textSize);
-                float x = (static_cast<float>(width) - textWidth) * 0.5f;
-                float y = (static_cast<float>(height) - textHeight) * 0.5f;
-                m_spriteFont->DrawString(m_spriteBatch.get(), winText, DirectX::XMFLOAT2(x, y), DirectX::Colors::Lime);
-            }
-        }
-        break;
+            break;
     }
     
     // Draw log output in the bottom half of the screen
@@ -678,165 +462,93 @@ void Game::Render()
     PIXEndEvent(m_deviceResources->GetCommandQueue());
 }
 
-// Reset game state for snake game
-void Game::ResetGame()
+// Render scene (snake, food, particles) with camera offset
+void Game::RenderScene(const DirectX::XMFLOAT2& cameraOffset)
 {
-    m_score = 0;
-    m_time = 0.0f;
-    m_moveAccumulator = 0.0f;
-    m_direction = Direction::Right;
-    m_nextDirection = Direction::Right;
-    
-    // Initialize random number generator
-    srand(static_cast<unsigned int>(time(nullptr)));
-    
-    // Clear snake and initialize with initial length
-    m_snake.clear();
-    
-    int width, height;
-    GetDefaultSize(width, height);
-    
-    // Start snake in center, facing right
-    float startX = static_cast<float>(width) * 0.5f;
-    float startY = static_cast<float>(height) * 0.5f;
-    
-    // Align to grid
-    startX = floorf(startX / c_cellSize) * c_cellSize + c_cellSize * 0.5f;
-    startY = floorf(startY / c_cellSize) * c_cellSize + c_cellSize * 0.5f;
-    
-    // Create initial snake (head + 2 segments, all in a row)
-    for (int i = 0; i < c_initialSnakeLength; ++i)
+    if (!m_placeholderTexture || m_placeholderTextureSRV.ptr == 0)
+        return;
+
+    const float cellSize = 20.0f; // Match SnakeGame::c_cellSize
+    const float segmentSize = cellSize * 0.9f; // Slightly smaller than cell for visual gap
+
+    // Draw snake
+    const auto& snakeSegments = m_snakeGame.GetSnakeSegments();
+    if (!snakeSegments.empty())
     {
-        DirectX::XMFLOAT2 segment;
-        segment.x = startX - static_cast<float>(i) * c_cellSize;
-        segment.y = startY;
-        m_snake.push_back(segment);
+        // Draw snake body (all segments except head)
+        for (size_t i = 1; i < snakeSegments.size(); ++i)
+        {
+            const DirectX::XMFLOAT2& segment = snakeSegments[i];
+            m_spriteBatch->Draw(
+                m_placeholderTextureSRV,
+                DirectX::XMUINT2(1, 1),
+                DirectX::XMFLOAT2(segment.x + cameraOffset.x - segmentSize * 0.5f, segment.y + cameraOffset.y - segmentSize * 0.5f),
+                nullptr,
+                DirectX::Colors::LightGreen, // Body color
+                0.0f,
+                DirectX::XMFLOAT2(0.0f, 0.0f),
+                segmentSize);
+        }
+
+        // Draw snake head (first segment)
+        const DirectX::XMFLOAT2& head = snakeSegments.front();
+        m_spriteBatch->Draw(
+            m_placeholderTextureSRV,
+            DirectX::XMUINT2(1, 1),
+            DirectX::XMFLOAT2(head.x + cameraOffset.x - segmentSize * 0.5f, head.y + cameraOffset.y - segmentSize * 0.5f),
+            nullptr,
+            DirectX::Colors::Cyan, // Head color
+            0.0f,
+            DirectX::XMFLOAT2(0.0f, 0.0f),
+            segmentSize);
     }
-    
-    // Spawn initial food
-    m_food.alive = true;
-    SpawnFoodNotOnSnake();
-    
-    StopRumble(); // Ensure rumble is stopped when starting
+
+    // Draw food
+    const Food& food = m_snakeGame.GetFood();
+    if (food.alive)
+    {
+        const float foodSize = cellSize * 0.8f;
+        m_spriteBatch->Draw(
+            m_placeholderTextureSRV,
+            DirectX::XMUINT2(1, 1),
+            DirectX::XMFLOAT2(food.pos.x + cameraOffset.x - foodSize * 0.5f, food.pos.y + cameraOffset.y - foodSize * 0.5f),
+            nullptr,
+            DirectX::Colors::Gold, // Food color
+            0.0f,
+            DirectX::XMFLOAT2(0.0f, 0.0f),
+            foodSize);
+    }
+
+    // Draw particles
+    m_effects.Draw(m_spriteBatch.get(), m_placeholderTextureSRV, cameraOffset);
 }
 
-// Move snake one step in current direction
-void Game::MoveSnakeOneStep()
+// Render HUD (FPS, Score, Length) - no camera offset
+void Game::RenderHUD()
 {
-    if (m_snake.empty())
+    if (!m_spriteFont)
         return;
-    
-    // Calculate next head position based on direction
-    DirectX::XMFLOAT2 head = m_snake.front();
-    DirectX::XMFLOAT2 nextHead = head;
-    
-    switch (m_direction)
-    {
-    case Direction::Up:
-        nextHead.y -= c_cellSize;
-        break;
-    case Direction::Down:
-        nextHead.y += c_cellSize;
-        break;
-    case Direction::Left:
-        nextHead.x -= c_cellSize;
-        break;
-    case Direction::Right:
-        nextHead.x += c_cellSize;
-        break;
-    }
-    
-    // Check boundary collision
-    int width, height;
-    GetDefaultSize(width, height);
-    
-    if (nextHead.x < 0.0f || nextHead.x >= static_cast<float>(width) ||
-        nextHead.y < 0.0f || nextHead.y >= static_cast<float>(height))
-    {
-        // Hit boundary - game over
-        m_state = GameState::GameOver;
-        StopRumble();
-        return;
-    }
-    
-    // Check self collision (compare with all body segments except head)
-    for (size_t i = 1; i < m_snake.size(); ++i)
-    {
-        const DirectX::XMFLOAT2& segment = m_snake[i];
-        if (nextHead.x == segment.x && nextHead.y == segment.y)
-        {
-            // Hit self - game over
-            m_state = GameState::GameOver;
-            StopRumble();
-            return;
-        }
-    }
-    
-    // Move snake: add new head
-    m_snake.push_front(nextHead);
-    
-    // Check if food is eaten (head position matches food position)
-    if (nextHead.x == m_food.pos.x && nextHead.y == m_food.pos.y)
-    {
-        // Food eaten - grow snake (don't pop tail), increase score, spawn new food
-        m_score++;
-        StartRumble(0.6f, 0.7f, 0.0f, 0.0f, 0.08f); // Light rumble when eating
-        SpawnFoodNotOnSnake();
-    }
-    else
-    {
-        // Normal movement - remove tail
-        m_snake.pop_back();
-    }
-}
 
-// Spawn food at random position not on snake
-void Game::SpawnFoodNotOnSnake()
-{
-    int width, height;
-    GetDefaultSize(width, height);
-    
-    const float margin = 50.0f; // Margin from screen edges
-    const int minCellX = static_cast<int>(ceilf(margin / c_cellSize));
-    const int maxCellX = static_cast<int>(floorf((static_cast<float>(width) - margin) / c_cellSize));
-    const int minCellY = static_cast<int>(ceilf(margin / c_cellSize));
-    const int maxCellY = static_cast<int>(floorf((static_cast<float>(height) - margin) / c_cellSize));
-    
-    // Try to find a valid position (not on snake)
-    const int maxAttempts = 100;
-    for (int attempt = 0; attempt < maxAttempts; ++attempt)
-    {
-        int cellX = minCellX + (rand() % (maxCellX - minCellX + 1));
-        int cellY = minCellY + (rand() % (maxCellY - minCellY + 1));
-        
-        // Convert to pixel position (center of cell)
-        DirectX::XMFLOAT2 foodPos;
-        foodPos.x = static_cast<float>(cellX) * c_cellSize + c_cellSize * 0.5f;
-        foodPos.y = static_cast<float>(cellY) * c_cellSize + c_cellSize * 0.5f;
-        
-        // Check if position is on snake
-        bool onSnake = false;
-        for (const auto& segment : m_snake)
-        {
-            if (foodPos.x == segment.x && foodPos.y == segment.y)
-            {
-                onSnake = true;
-                break;
-            }
-        }
-        
-        if (!onSnake)
-        {
-            m_food.pos = foodPos;
-            m_food.alive = true;
-            return;
-        }
-    }
-    
-    // Fallback: if we can't find a position after maxAttempts, place at a default location
-    m_food.pos.x = static_cast<float>(width) * 0.5f;
-    m_food.pos.y = static_cast<float>(height) * 0.5f;
-    m_food.alive = true;
+    float yPos = 10.0f;
+    const float lineHeight = 30.0f;
+
+    // FPS
+    wchar_t fpsText[64];
+    float fps = static_cast<float>(m_timer.GetFramesPerSecond());
+    swprintf_s(fpsText, L"FPS: %.1f", fps);
+    m_spriteFont->DrawString(m_spriteBatch.get(), fpsText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
+    yPos += lineHeight;
+
+    // Score
+    wchar_t scoreText[64];
+    swprintf_s(scoreText, L"Score: %d", m_snakeGame.GetScore());
+    m_spriteFont->DrawString(m_spriteBatch.get(), scoreText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
+    yPos += lineHeight;
+
+    // Length
+    wchar_t lengthText[64];
+    swprintf_s(lengthText, L"Length: %zu", m_snakeGame.GetLength());
+    m_spriteFont->DrawString(m_spriteBatch.get(), lengthText, DirectX::XMFLOAT2(10.0f, yPos), DirectX::Colors::Yellow);
 }
 
 // Start rumble feedback

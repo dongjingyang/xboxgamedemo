@@ -13,6 +13,11 @@
 #include <mutex>
 #include <vector>
 
+// Game modules
+#include "SnakeGame.h"
+#include "Effects2D.h"
+#include "InputRouter.h"
+
 // Include GameInput header if available
 #if defined(USING_GAMEINPUT) || defined(_GAMING_DESKTOP) || defined(_GAMING_XBOX)
 // Temporarily modify WINAPI_FAMILY to include WINAPI_PARTITION_APP for gameinput.h
@@ -49,22 +54,6 @@ enum class GameState
     Paused,     // Game is paused - "Paused - Press Start"
     Win,        // Game won - "You Win - Press A to Restart" (kept for compatibility)
     GameOver    // Game over - "Game Over - Press A to Restart"
-};
-
-// Direction enumeration for snake movement
-enum class Direction
-{
-    Up,
-    Down,
-    Left,
-    Right
-};
-
-// Food structure (reusing Coin name for compatibility)
-struct Coin
-{
-    DirectX::XMFLOAT2 pos;  // Position (grid-aligned)
-    bool alive;             // Always true for food
 };
 
 // A basic game implementation that creates a D3D12 device and
@@ -117,10 +106,9 @@ private:
     // Logging helper function
     void AddLog(const char* message);
     
-    // Snake game system
-    void ResetGame();  // Reset game state (snake, score, food, direction)
-    void MoveSnakeOneStep();  // Move snake one cell in current direction
-    void SpawnFoodNotOnSnake();  // Spawn food at random position not on snake
+    // Rendering helpers
+    void RenderScene(const DirectX::XMFLOAT2& cameraOffset);  // Render snake, food, particles
+    void RenderHUD();  // Render HUD (FPS, Score, Length) - no camera offset
     
     // Rumble system
     void StartRumble(float lowFrequency, float highFrequency, float leftTrigger, float rightTrigger, float durationSeconds);
@@ -145,21 +133,12 @@ private:
     
     // Game state
     GameState                                   m_state;
-    DirectX::XMFLOAT2                            m_playerPos;  // Kept for compatibility, not used in snake game
-    int                                         m_score;
     float                                       m_time;
     
-    // Snake game
-    std::deque<DirectX::XMFLOAT2>               m_snake;  // Snake body segments (grid-aligned positions)
-    Direction                                    m_direction;  // Current movement direction
-    Direction                                    m_nextDirection;  // Queued direction (prevents 180-degree turns)
-    float                                       m_moveAccumulator;  // Accumulated time for discrete movement
-    Coin                                        m_food;  // Single food item (always alive=true)
-    
-    // Snake game constants
-    static constexpr float                      c_cellSize = 20.0f;  // Grid cell size in pixels
-    static constexpr float                      c_moveInterval = 0.10f;  // Time between moves (10 cells/second)
-    static constexpr int                        c_initialSnakeLength = 3;  // Initial snake length (head + 2 segments)
+    // Game modules
+    SnakeGame                                   m_snakeGame;
+    Effects2D                                   m_effects;
+    InputRouter                                 m_inputRouter;
     
     // Placeholder texture for player sprite (1x1 white texture)
     Microsoft::WRL::ComPtr<ID3D12Resource>      m_placeholderTexture;
@@ -167,7 +146,6 @@ private:
     
     // GameInput (forward declared to avoid header dependencies)
     void*                                        m_gameInput; // IGameInput* when GameInput is available
-    uint64_t                                     m_lastButtonState; // Track button state to detect presses
     
     // Gamepad device for rumble (only when GameInput is available)
 #if defined(USING_GAMEINPUT) || defined(_GAMING_DESKTOP) || defined(_GAMING_XBOX)

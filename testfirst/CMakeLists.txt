@@ -7,6 +7,12 @@ add_executable(${PROJECT_NAME} WIN32
     Main.cpp
     StepTimer.h
     pch.h
+    SnakeGame.cpp
+    SnakeGame.h
+    Effects2D.cpp
+    Effects2D.h
+    InputRouter.cpp
+    InputRouter.h
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE pch.h)
