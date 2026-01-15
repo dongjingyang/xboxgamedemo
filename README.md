@@ -232,5 +232,3 @@ This project is based on the Microsoft GDK template project and follows the corr
 Issues and Pull Requests are welcome!
 
 ---
-
-**Note**: This is a demonstration project showcasing the basic architecture for developing Xbox/Windows games using modern C++ and DirectX 12. It can serve as a starting point for learning DirectX 12 and Microsoft GDK.
