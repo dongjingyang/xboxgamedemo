@@ -1,133 +1,168 @@
 # Xbox Game Demo - 2D Coin Collection Game
 
-一个基于 DirectX 12 和 Microsoft GDK 的 2D 游戏演示项目，展示了使用 CMake 和 vcpkg 构建 Xbox/Windows 游戏的完整工作流程。
+A DirectX 12 and Microsoft GDK based 2D game demonstration project showcasing a complete workflow for building Xbox/Windows games using CMake and vcpkg.
 
-## 🎮 游戏特性
+## 🎮 Gamepad Support
 
-- **2D 精灵渲染**：使用 DirectXTK12 的 SpriteBatch 进行高效 2D 渲染
-- **Coin 收集系统**：10 个随机分布的 coin，带有上下浮动动画
-- **碰撞检测**：使用平方距离优化，无需 sqrt 计算
-- **游戏状态管理**：Title、Playing、Paused、Win 四种状态
-- **输入支持**：支持手柄（GameInput）和键盘（WASD/方向键）
-- **实时日志显示**：屏幕下半部分显示调试日志
-- **HUD 信息**：显示 FPS、玩家位置、分数和剩余 coin 数
+**Full GameInput API Support with Haptic Feedback**
 
-## 🎯 游戏玩法
+This game features comprehensive gamepad support using the GameInput API:
 
-1. **开始游戏**：按 `Space`/`Enter` 或手柄 `A` 键开始
-2. **移动玩家**：使用 `WASD`/方向键或手柄左摇杆移动青色方块
-3. **收集 Coins**：接近金色 coin（距离 < 30 像素）时自动收集
-4. **完成目标**：收集所有 10 个 coin 即可获胜
-5. **重新开始**：获胜后按 `A` 键或 `Space`/`Enter` 重新开始
+- **Gamepad Input**: Full support for Xbox controllers and compatible gamepads
+  - Left thumbstick for player movement
+  - A button to start/resume/restart game
+  - Menu (Start) button to pause/unpause
+- **Haptic Feedback**: Rumble feedback when collecting coins
+  - Triggers on coin collection with configurable intensity
+  - Automatic rumble management with timer-based stopping
+  - Works with Xbox controllers and other GameInput-compatible devices
+- **Keyboard Fallback**: WASD/Arrow keys for movement, Space/Enter for actions, ESC for pause
+- **Multi-input Support**: Seamlessly switches between gamepad and keyboard input
 
-## 🚀 快速开始
+### Controller Requirements
 
-### 前置要求
+- Xbox Wireless Controller (recommended)
+- Any GameInput-compatible gamepad
+- Windows 10/11 with GameInput API support
+- Microsoft Game Runtime installed
 
-- Windows 10/11 或 Xbox 开发环境
-- Visual Studio 2022 (v17.6 或更高版本)
-- CMake 3.21 或更高版本
-- [Microsoft Game Runtime](https://aka.ms/GamingRepairTool)（如果未安装，运行修复工具）
+## 🎮 Game Features
 
-### 构建项目
+- **2D Sprite Rendering**: Efficient 2D rendering using DirectXTK12's SpriteBatch
+- **Coin Collection System**: 10 randomly distributed coins with floating animation
+- **Collision Detection**: Optimized squared distance calculation (no sqrt)
+- **Game State Management**: Title, Playing, Paused, and Win states
+- **Input Support**: Gamepad (GameInput) and keyboard (WASD/Arrow keys)
+- **Real-time Log Display**: Debug logs shown in the bottom half of the screen
+- **HUD Information**: Displays FPS, player position, score, and remaining coin count
 
-1. **克隆仓库**
+## 🎯 How to Play
+
+1. **Start Game**: Press `Space`/`Enter` or gamepad `A` button to start
+2. **Move Player**: Use `WASD`/Arrow keys or left thumbstick to move the cyan square
+3. **Collect Coins**: Approach golden coins (distance < 30 pixels) to automatically collect them
+   - **Haptic Feedback**: Feel the controller rumble when collecting each coin!
+4. **Complete Objective**: Collect all 10 coins to win
+5. **Restart**: Press `A` button or `Space`/`Enter` after winning to restart
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Windows 10/11 or Xbox development environment
+- Visual Studio 2022 (v17.6 or later)
+- CMake 3.21 or later
+- [Microsoft Game Runtime](https://aka.ms/GamingRepairTool) (run repair tool if not installed)
+
+### Building the Project
+
+1. **Clone the repository**
    ```bash
    git clone https://github.com/dongjingyang/xboxgamedemo.git
    cd xboxgamedemo
    ```
 
-2. **使用 Visual Studio**
-   - 打开 Visual Studio 2022
-   - 选择 "Open a local folder"
-   - 选择项目根目录
-   - Visual Studio 会自动检测 CMake 并配置项目
+2. **Using Visual Studio**
+   - Open Visual Studio 2022
+   - Select "Open a local folder"
+   - Select the project root directory
+   - Visual Studio will automatically detect CMake and configure the project
 
-3. **使用命令行**
+3. **Using Command Line**
    ```bash
    cmake --preset x64-Debug
    cmake --build --preset x64-Debug
    ```
 
-### 运行游戏
+### Running the Game
 
-构建完成后，可执行文件位于：
+After building, the executable will be located at:
 - Debug: `out/build/x64-Debug/testfirst/testfirst.exe`
 - Release: `out/build/x64-Release/testfirst/testfirst.exe`
 
-## 📁 项目结构
+**Note**: Connect your Xbox controller before launching the game for the best experience with haptic feedback!
+
+## 📁 Project Structure
 
 ```
 testfirst/
-├── Assets/              # 游戏资源
-│   ├── arial.spritefont # 字体文件
-│   └── *.png            # 图标资源
-├── Game.cpp/h           # 游戏主逻辑（状态管理、coin 系统、渲染）
-├── DeviceResources.cpp/h # Direct3D 12 设备资源管理
-├── Main.cpp              # 程序入口和窗口消息处理
-├── pch.cpp/h            # 预编译头文件
-└── StepTimer.h           # 游戏计时器
+├── Assets/              # Game resources
+│   ├── arial.spritefont # Font file
+│   └── *.png            # Icon resources
+├── Game.cpp/h           # Main game logic (state management, coin system, rendering)
+├── DeviceResources.cpp/h # Direct3D 12 device resource management
+├── Main.cpp              # Program entry point and window message handling
+├── pch.cpp/h            # Precompiled header files
+└── StepTimer.h           # Game timer
 
 External/
-└── DirectXTK12/          # DirectX Tool Kit for DirectX 12（子模块）
+└── DirectXTK12/          # DirectX Tool Kit for DirectX 12 (submodule)
 
-CMakeLists.txt            # CMake 主配置文件
-vcpkg.json                # vcpkg 依赖清单
-vcpkg-configuration.json  # vcpkg 配置
+CMakeLists.txt            # Main CMake configuration file
+vcpkg.json                # vcpkg dependency manifest
+vcpkg-configuration.json  # vcpkg configuration
 ```
 
-## 🛠️ 技术栈
+## 🛠️ Technology Stack
 
-- **图形 API**: DirectX 12
-- **游戏框架**: Microsoft GDK
-- **渲染库**: DirectXTK12 (SpriteBatch, SpriteFont)
-- **输入系统**: GameInput API
-- **构建系统**: CMake + vcpkg
-- **编程语言**: C++17
+- **Graphics API**: DirectX 12
+- **Game Framework**: Microsoft GDK
+- **Rendering Library**: DirectXTK12 (SpriteBatch, SpriteFont)
+- **Input System**: GameInput API (gamepad, keyboard, mouse)
+- **Build System**: CMake + vcpkg
+- **Programming Language**: C++17
 
-## 📦 依赖项
+## 📦 Dependencies
 
-项目使用 vcpkg 管理依赖，主要包含：
+The project uses vcpkg to manage dependencies, primarily including:
 
 - `ms-gdk` - Microsoft Game Development Kit
 - `directxtk12` - DirectX Tool Kit for DirectX 12
-- `directxmath` - DirectX Math 库
+- `directxmath` - DirectX Math library
 - `gameinput` - GameInput API
 - `directx-dxc` - DirectX Shader Compiler
-- `winpixevent` - PIX 事件支持
+- `winpixevent` - PIX event support
 
-所有依赖在首次构建时由 vcpkg 自动下载和编译。
+All dependencies are automatically downloaded and compiled by vcpkg on first build.
 
-## 🎨 游戏实现细节
+## 🎨 Game Implementation Details
 
-### Coin 系统
+### Coin System
 
-- **数据结构**：`vector<Coin>`，每个 coin 包含位置和存活状态
-- **初始化**：进入 Playing 状态时随机生成 10 个 coin，避开屏幕边缘 50 像素
-- **动画**：使用 `sin(time * 2.0) * 10.0` 实现上下浮动效果
-- **碰撞检测**：使用平方距离比较（`dx² + dy² < 30²`），避免 sqrt 计算
+- **Data Structure**: `vector<Coin>`, each coin contains position and alive status
+- **Initialization**: Randomly generates 10 coins when entering Playing state, avoiding screen edges (50px margin)
+- **Animation**: Uses `sin(time * 2.0) * 10.0` for vertical floating effect
+- **Collision Detection**: Uses squared distance comparison (`dx² + dy² < 30²`), avoiding sqrt calculation
 
-### 游戏状态
+### Game States
 
-- **Title**: 标题屏幕，显示 "Press A to Start"
-- **Playing**: 游戏进行中，玩家可以移动和收集 coin
-- **Paused**: 暂停状态，按 ESC 或 Menu 键暂停/继续
-- **Win**: 胜利状态，收集完所有 coin 后显示 "You Win - Press A to Restart"
+- **Title**: Title screen, displays "Press A to Start"
+- **Playing**: Game in progress, player can move and collect coins
+- **Paused**: Paused state, press ESC or Menu button to pause/resume
+- **Win**: Victory state, displays "You Win - Press A to Restart" after collecting all coins
 
-### 日志系统
+### Haptic Feedback System
 
-- 所有 `OutputDebugStringA` 输出都会显示在屏幕下半部分
-- 最多显示 20 行日志
-- 线程安全的日志缓冲区
-- 自动滚动显示最新日志
+- **Trigger**: Activates when collecting any coin during Playing state
+- **Intensity**: Configurable low-frequency (0.6) and high-frequency (0.7) motors
+- **Duration**: 0.15 seconds with automatic stop
+- **Device Support**: Automatically detects and uses connected gamepad device
+- **Fallback**: Gracefully handles cases where no gamepad is connected
 
-## 🔧 CMake + vcpkg 集成
+### Logging System
 
-本项目演示了完全独立的方法来使用 Microsoft GDK，无需安装任何额外工具。所有依赖通过 [vcpkg](https://aka.ms/vcpkg) 包管理器自动管理。
+- All `OutputDebugStringA` output is displayed in the bottom half of the screen
+- Maximum of 20 log lines displayed
+- Thread-safe log buffer
+- Automatic scrolling to show latest logs
 
-### vcpkg 配置
+## 🔧 CMake + vcpkg Integration
 
-项目使用 vcpkg 的 "manifest mode"，依赖项在 `vcpkg.json` 中声明：
+This project demonstrates a fully standalone method for using Microsoft GDK without installing any additional tools. All dependencies are automatically managed through the [vcpkg](https://aka.ms/vcpkg) package manager.
+
+### vcpkg Configuration
+
+The project uses vcpkg's "manifest mode", with dependencies declared in `vcpkg.json`:
 
 ```json
 {
@@ -142,76 +177,76 @@ vcpkg-configuration.json  # vcpkg 配置
 }
 ```
 
-### 更新依赖版本
+### Updating Dependencies
 
-要更新到新版本的依赖，修改 `vcpkg-configuration.json` 中的 baseline：
+To update to newer dependency versions, modify the baseline in `vcpkg-configuration.json`:
 
 ```json
 {
   "default-registry": {
     "kind": "builtin",
-    "baseline": "最新提交哈希"
+    "baseline": "latest commit hash"
   }
 }
 ```
 
-### 使用静态库
+### Using Static Libraries
 
-要使用静态库而非 DLL，在 `CMakePresets.json` 中将 `VCPKG_TARGET_TRIPLET` 从 `x64-windows` 改为 `x64-windows-static-md`。
+To use static libraries instead of DLLs, change `VCPKG_TARGET_TRIPLET` in `CMakePresets.json` from `x64-windows` to `x64-windows-static-md`.
 
-## 📝 字体文件生成
+## 📝 Font File Generation
 
-项目使用 `.spritefont` 格式的字体文件。如果字体文件缺失，可以使用提供的脚本生成：
+The project uses `.spritefont` format font files. If the font file is missing, you can generate it using the provided script:
 
 ```powershell
 .\download_makespritefont.ps1
 ```
 
-然后使用生成的 MakeSpriteFont 工具：
+Then use the generated MakeSpriteFont tool:
 
 ```bash
 MakeSpriteFont.exe "Arial" testfirst\Assets\arial.spritefont /FontSize:32
 ```
 
-详细说明请参考 `testfirst/Assets/README_FONT.md`。
+For detailed instructions, see `testfirst/Assets/README_FONT.md`.
 
-## 📦 打包
+## 📦 Packaging
 
-使用 PowerShell 脚本创建打包布局：
+Use the PowerShell script to create a package layout:
 
 ```powershell
 powershell -File PackageLayout.ps1 -Destination layout -Configuration Release
 ```
 
-`PackageLayout.flt` 文件列出了要排除的文件模式（如 `.exp`、`.pdb`）。
+The `PackageLayout.flt` file lists filename patterns to exclude (such as `.exp`, `.pdb`).
 
-## ⚠️ 已知问题
+## ⚠️ Known Issues
 
-1. **路径长度限制**：如果项目路径过长（包含 vcpkg_installed 和 triplet 文件夹），可能超过 `_MAX_PATH`。建议将项目放在较浅的目录中。
+1. **Path Length Limitation**: If the project path is too long (including vcpkg_installed and triplet folders), it may exceed `_MAX_PATH`. It is recommended to place the project in a shallower directory.
 
-2. **Game Runtime 未安装**：如果看到 "Game Runtime is not installed" 错误，运行 [Gaming Services Repair Tool](https://aka.ms/GamingRepairTool) 或使用 winget：
+2. **Game Runtime Not Installed**: If you see "Game Runtime is not installed" error, run the [Gaming Services Repair Tool](https://aka.ms/GamingRepairTool) or use winget:
    ```bash
-   winget install 9MWPM2CQNLHN -s msstore
-   ```
+winget install 9MWPM2CQNLHN -s msstore
+```
 
-3. **ms-gdk 包名变更**：从 2025 年 10 月起，ms-gdk 包名已更改。如果使用旧版本 GDK，需要更新 CMakeLists.txt 中的包名。
+3. **ms-gdk Package Name Change**: As of October 2025, the ms-gdk package name has changed. If using older GDK versions, update the package name in CMakeLists.txt.
 
-## 📚 进一步阅读
+## 📚 Further Reading
 
-- [Microsoft GDK 文档](http://aka.ms/gdkdocs)
+- [Microsoft GDK Documentation](http://aka.ms/gdkdocs)
 - [DirectX 12 Agility SDK](https://aka.ms/directx12agility)
 - [DirectXTK12 Wiki](https://github.com/microsoft/DirectXTK12/wiki)
 - [vcpkg for Xbox](https://learn.microsoft.com/vcpkg/users/platforms/xbox/)
 - [GameInput API](http://aka.ms/gameinput)
 
-## 📄 许可证
+## 📄 License
 
-本项目基于 Microsoft GDK 模板项目，遵循相应的许可证条款。
+This project is based on the Microsoft GDK template project and follows the corresponding license terms.
 
-## 🤝 贡献
+## 🤝 Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
 ---
 
-**注意**：这是一个演示项目，展示了使用现代 C++ 和 DirectX 12 开发 Xbox/Windows 游戏的基础架构。可以作为学习 DirectX 12 和 Microsoft GDK 的起点。
+**Note**: This is a demonstration project showcasing the basic architecture for developing Xbox/Windows games using modern C++ and DirectX 12. It can serve as a starting point for learning DirectX 12 and Microsoft GDK.
