@@ -47,14 +47,24 @@ enum class GameState
     Title,      // Title screen - "Press A to Start"
     Playing,    // Game is running
     Paused,     // Game is paused - "Paused - Press Start"
-    Win         // Game won - "You Win - Press A to Restart"
+    Win,        // Game won - "You Win - Press A to Restart" (kept for compatibility)
+    GameOver    // Game over - "Game Over - Press A to Restart"
 };
 
-// Coin structure for collectibles
+// Direction enumeration for snake movement
+enum class Direction
+{
+    Up,
+    Down,
+    Left,
+    Right
+};
+
+// Food structure (reusing Coin name for compatibility)
 struct Coin
 {
-    DirectX::XMFLOAT2 pos;  // Position
-    bool alive;             // Whether coin is still collectible
+    DirectX::XMFLOAT2 pos;  // Position (grid-aligned)
+    bool alive;             // Always true for food
 };
 
 // A basic game implementation that creates a D3D12 device and
@@ -107,9 +117,15 @@ private:
     // Logging helper function
     void AddLog(const char* message);
     
-    // Coin system
-    void InitializeCoins();  // Initialize coins when starting game
-    int GetRemainingCoins() const;  // Get count of remaining coins
+    // Snake game system
+    void ResetGame();  // Reset game state (snake, score, food, direction)
+    void MoveSnakeOneStep();  // Move snake one cell in current direction
+    void SpawnFoodNotOnSnake();  // Spawn food at random position not on snake
+    
+    // Rumble system
+    void StartRumble(float lowFrequency, float highFrequency, float leftTrigger, float rightTrigger, float durationSeconds);
+    void UpdateRumble(float elapsedTime);
+    void StopRumble();
 
     // Device resources.
     std::unique_ptr<DX::DeviceResources>        m_deviceResources;
@@ -129,15 +145,21 @@ private:
     
     // Game state
     GameState                                   m_state;
-    DirectX::XMFLOAT2                            m_playerPos;
+    DirectX::XMFLOAT2                            m_playerPos;  // Kept for compatibility, not used in snake game
     int                                         m_score;
     float                                       m_time;
     
-    // Coins
-    std::vector<Coin>                           m_coins;
-    static constexpr int                        c_coinCount = 10;  // Total number of coins
-    static constexpr float                      c_collectDistance = 30.0f;  // Collection distance threshold
-    static constexpr float                      c_collectDistanceSq = c_collectDistance * c_collectDistance;  // Squared distance for comparison
+    // Snake game
+    std::deque<DirectX::XMFLOAT2>               m_snake;  // Snake body segments (grid-aligned positions)
+    Direction                                    m_direction;  // Current movement direction
+    Direction                                    m_nextDirection;  // Queued direction (prevents 180-degree turns)
+    float                                       m_moveAccumulator;  // Accumulated time for discrete movement
+    Coin                                        m_food;  // Single food item (always alive=true)
+    
+    // Snake game constants
+    static constexpr float                      c_cellSize = 20.0f;  // Grid cell size in pixels
+    static constexpr float                      c_moveInterval = 0.10f;  // Time between moves (10 cells/second)
+    static constexpr int                        c_initialSnakeLength = 3;  // Initial snake length (head + 2 segments)
     
     // Placeholder texture for player sprite (1x1 white texture)
     Microsoft::WRL::ComPtr<ID3D12Resource>      m_placeholderTexture;
@@ -146,6 +168,12 @@ private:
     // GameInput (forward declared to avoid header dependencies)
     void*                                        m_gameInput; // IGameInput* when GameInput is available
     uint64_t                                     m_lastButtonState; // Track button state to detect presses
+    
+    // Gamepad device for rumble (only when GameInput is available)
+#if defined(USING_GAMEINPUT) || defined(_GAMING_DESKTOP) || defined(_GAMING_XBOX)
+    Microsoft::WRL::ComPtr<GameInput::v3::IGameInputDevice> m_activeGamepadDevice;
+#endif
+    float                                        m_rumbleTimeLeft; // Remaining rumble time in seconds
     
     // Log buffer for on-screen display
     std::deque<std::string>                      m_logBuffer;

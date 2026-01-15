@@ -1,6 +1,6 @@
-# Xbox Game Demo - 2D Coin Collection Game
+# Xbox Game Demo - 2D Snake Game
 
-A DirectX 12 and Microsoft GDK based 2D game demonstration project showcasing a complete workflow for building Xbox/Windows games using CMake and vcpkg.
+A DirectX 12 and Microsoft GDK based 2D snake game demonstration project showcasing a complete workflow for building Xbox/Windows games using CMake and vcpkg.
 
 ## 🎮 Gamepad Support
 
@@ -9,14 +9,14 @@ A DirectX 12 and Microsoft GDK based 2D game demonstration project showcasing a 
 This game features comprehensive gamepad support using the GameInput API:
 
 - **Gamepad Input**: Full support for Xbox controllers and compatible gamepads
-  - Left thumbstick for player movement
+  - Left thumbstick for direction control (discrete 4-direction movement)
   - A button to start/resume/restart game
   - Menu (Start) button to pause/unpause
-- **Haptic Feedback**: Rumble feedback when collecting coins
-  - Triggers on coin collection with configurable intensity
+- **Haptic Feedback**: Rumble feedback when eating food
+  - Triggers on food collection with configurable intensity
   - Automatic rumble management with timer-based stopping
   - Works with Xbox controllers and other GameInput-compatible devices
-- **Keyboard Fallback**: WASD/Arrow keys for movement, Space/Enter for actions, ESC for pause
+- **Keyboard Fallback**: WASD/Arrow keys for direction control, Space/Enter for actions, ESC for pause
 - **Multi-input Support**: Seamlessly switches between gamepad and keyboard input
 
 ### Controller Requirements
@@ -29,21 +29,28 @@ This game features comprehensive gamepad support using the GameInput API:
 ## 🎮 Game Features
 
 - **2D Sprite Rendering**: Efficient 2D rendering using DirectXTK12's SpriteBatch
-- **Coin Collection System**: 10 randomly distributed coins with floating animation
-- **Collision Detection**: Optimized squared distance calculation (no sqrt)
-- **Game State Management**: Title, Playing, Paused, and Win states
-- **Input Support**: Gamepad (GameInput) and keyboard (WASD/Arrow keys)
+- **Classic Snake Gameplay**: Discrete grid-based movement (20 pixels per cell, 10 cells/second)
+- **Collision Detection**: Boundary collision and self-collision detection
+- **Game State Management**: Title, Playing, Paused, GameOver, and Win states
+- **Input Support**: Gamepad (GameInput) and keyboard (WASD/Arrow keys) with 4-direction control
+- **Food System**: Single food item that respawns randomly when eaten (not on snake body)
 - **Real-time Log Display**: Debug logs shown in the bottom half of the screen
-- **HUD Information**: Displays FPS, player position, score, and remaining coin count
+- **HUD Information**: Displays FPS, score, and snake length
 
 ## 🎯 How to Play
 
 1. **Start Game**: Press `Space`/`Enter` or gamepad `A` button to start
-2. **Move Player**: Use `WASD`/Arrow keys or left thumbstick to move the cyan square
-3. **Collect Coins**: Approach golden coins (distance < 30 pixels) to automatically collect them
-   - **Haptic Feedback**: Feel the controller rumble when collecting each coin!
-4. **Complete Objective**: Collect all 10 coins to win
-5. **Restart**: Press `A` button or `Space`/`Enter` after winning to restart
+2. **Control Snake**: Use `WASD`/Arrow keys or left thumbstick to change direction
+   - Snake moves automatically in discrete steps (10 cells per second)
+   - Cannot make 180-degree turns (prevents instant death)
+3. **Eat Food**: Guide the snake head (cyan) to the golden food square
+   - **Haptic Feedback**: Feel the controller rumble when eating food!
+   - Snake grows by one segment each time you eat
+   - Food respawns at a random location (not on snake body)
+4. **Avoid Collisions**: 
+   - Don't hit the screen boundaries
+   - Don't collide with your own body
+5. **Game Over**: If you collide, the game ends. Press `A` button or `Space`/`Enter` to restart
 
 ## 🚀 Quick Start
 
@@ -127,27 +134,37 @@ All dependencies are automatically downloaded and compiled by vcpkg on first bui
 
 ## 🎨 Game Implementation Details
 
-### Coin System
+### Snake Game System
 
-- **Data Structure**: `vector<Coin>`, each coin contains position and alive status
-- **Initialization**: Randomly generates 10 coins when entering Playing state, avoiding screen edges (50px margin)
-- **Animation**: Uses `sin(time * 2.0) * 10.0` for vertical floating effect
-- **Collision Detection**: Uses squared distance comparison (`dx² + dy² < 30²`), avoiding sqrt calculation
+- **Data Structure**: `deque<XMFLOAT2>` for snake body segments, each segment is grid-aligned
+- **Initialization**: Snake starts with 3 segments (head + 2 body segments) in the center, facing right
+- **Movement**: Discrete grid-based movement (20 pixels per cell, 0.10 seconds per step)
+- **Direction Control**: 4-direction control (Up/Down/Left/Right) with 180-degree turn prevention
+- **Food System**: Single food item that respawns at random grid positions (not on snake body)
+- **Growth**: Snake grows by one segment each time food is eaten (tail is not removed)
+
+### Collision Detection
+
+- **Boundary Collision**: Checks if snake head is outside screen bounds (0 to width/height)
+- **Self Collision**: Compares snake head position with all body segments (index 1 onwards)
+- **Grid Alignment**: All positions are aligned to 20-pixel grid cells for precise collision
 
 ### Game States
 
 - **Title**: Title screen, displays "Press A to Start"
-- **Playing**: Game in progress, player can move and collect coins
-- **Paused**: Paused state, press ESC or Menu button to pause/resume
-- **Win**: Victory state, displays "You Win - Press A to Restart" after collecting all coins
+- **Playing**: Game in progress, snake moves automatically, player controls direction
+- **Paused**: Paused state, press ESC or Menu button to pause/resume (snake stops moving)
+- **GameOver**: Game over state, displays "Game Over - Press A to Restart" when collision occurs
+- **Win**: Victory state (kept for compatibility), displays "You Win - Press A to Restart"
 
 ### Haptic Feedback System
 
-- **Trigger**: Activates when collecting any coin during Playing state
+- **Trigger**: Activates when eating food during Playing state
 - **Intensity**: Configurable low-frequency (0.6) and high-frequency (0.7) motors
-- **Duration**: 0.15 seconds with automatic stop
+- **Duration**: 0.08 seconds with automatic stop
 - **Device Support**: Automatically detects and uses connected gamepad device
 - **Fallback**: Gracefully handles cases where no gamepad is connected
+- **State Management**: Automatically stops rumble when entering Paused or GameOver states
 
 ### Logging System
 
